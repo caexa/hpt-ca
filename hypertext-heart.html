@@ -106,10 +106,10 @@ I love you <span class="link alt pulse-word" data-alt="where silence leans into 
 </div>
 
 <audio id="beat" preload="auto" loop>
-  <source src="audio/heartbeat.mp3" type="audio/mpeg">
+  <source src="heartbeat.mp3" type="audio/mpeg">
 </audio>
 <audio id="stat" preload="auto" loop>
-  <source src="audio/static.mp3" type="audio/mpeg">
+  <source src="static.mp3" type="audio/mpeg">
 </audio>
 
 <script>
@@ -136,47 +136,134 @@ If you still want an ending, try to <span class="link alt pulse-word" data-alt="
 </div>`
 };
 
-const poemEl=document.getElementById('poem');
-const crackEl=document.getElementById('crack');
-const beat=document.getElementById('beat');
-const stat=document.getElementById('stat');
+const poemEl = document.getElementById('poem');
+const crackEl = document.getElementById('crack');
+const beat = document.getElementById('beat');
+const stat = document.getElementById('stat');
 
-let idleMs=0, hidden=false, hardIdleMs=0;
+let idleMs = 0, hidden = false, hardIdleMs = 0;
+let audioInitialized = false;
 
-// check localStorage if secret ending already shown
-let secretDone = localStorage.getItem('secretEndingShown') === 'true';
+// Audio volumes
+beat.volume = 0;
+stat.volume = 0;
 
-const HIDE_AFTER=700, DEAD_AFTER=10000; // 10 seconds
+// Smooth fade function
+function fadeAudio(audio, target, duration) {
+    const startVolume = audio.volume;
+    const step = (target - startVolume) / (duration / 50);
+    const interval = setInterval(() => {
+        audio.volume = Math.max(0, Math.min(1, audio.volume + step));
+        if ((step > 0 && audio.volume >= target) || (step < 0 && audio.volume <= target)) {
+            audio.volume = target;
+            clearInterval(interval);
+        }
+    }, 50);
+}
+
+// Initialize audio on first user interaction
+function initAudio() {
+    if (audioInitialized) return;
+    audioInitialized = true;
+    
+    // Start both sounds
+    beat.play().catch(() => {});
+    stat.play().catch(() => {});
+    
+    // Start with heartbeat
+    playHeartbeat();
+}
+
+// Play heartbeat (when text is visible)
+function playHeartbeat() {
+    fadeAudio(beat, 0.4, 500);
+    fadeAudio(stat, 0, 300);
+}
+
+// Fade to static (when text is hidden)
+function fadeToStatic() {
+    fadeAudio(beat, 0, 500);
+    fadeAudio(stat, 0.15, 500);
+}
+
+// Check localStorage if secret ending already shown
+let secretDone = false;
+try {
+    secretDone = localStorage.getItem('secretEndingShown') === 'true';
+} catch (e) {
+    // localStorage might not be available
+    secretDone = false;
+}
+
+const HIDE_AFTER = 700, DEAD_AFTER = 10000; // 10 seconds
 
 // Display next page
-function nextPage(key){poemEl.classList.add('hidden'); setTimeout(()=>{poemEl.innerHTML=PAGES[key]; poemEl.classList.remove('hidden');},150);}
+function nextPage(key) {
+    if (!audioInitialized) initAudio();
+    
+    poemEl.classList.add('hidden');
+    setTimeout(() => {
+        poemEl.innerHTML = PAGES[key];
+        poemEl.classList.remove('hidden');
+    }, 150);
+}
 
 // Mouse movement
-function onMove(){idleMs=0; hardIdleMs=0; if(hidden){poemEl.classList.remove('hidden'); hidden=false;} }
-document.addEventListener('mousemove',onMove);
-document.addEventListener('touchmove',onMove,{passive:true});
+function onMove() {
+    if (!audioInitialized) initAudio();
+    
+    idleMs = 0;
+    hardIdleMs = 0;
+    
+    if (hidden) {
+        poemEl.classList.remove('hidden');
+        hidden = false;
+        playHeartbeat(); // Resume heartbeat when text becomes visible
+    }
+}
+
+document.addEventListener('mousemove', onMove);
+document.addEventListener('touchmove', onMove, { passive: true });
+document.addEventListener('click', initAudio, { once: true });
+document.addEventListener('touchstart', initAudio, { once: true });
+document.addEventListener('keydown', initAudio, { once: true });
 
 // Idle loop
-function tick(){
-    idleMs+=200; hardIdleMs+=200;
-    if(idleMs>HIDE_AFTER && !hidden){poemEl.classList.add('hidden'); hidden=true;}
-    if(hardIdleMs>=DEAD_AFTER && !secretDone){
+function tick() {
+    idleMs += 200;
+    hardIdleMs += 200;
+    
+    if (idleMs > HIDE_AFTER && !hidden) {
+        poemEl.classList.add('hidden');
+        hidden = true;
+        fadeToStatic(); // Switch to static when text disappears
+    }
+    
+    if (hardIdleMs >= DEAD_AFTER && !secretDone) {
         secretEnding();
-        secretDone=true;
-        localStorage.setItem('secretEndingShown','true'); // store flag on device
+        secretDone = true;
+        try {
+            localStorage.setItem('secretEndingShown', 'true');
+        } catch (e) {
+            // localStorage might not be available
+        }
         return;
     }
-    setTimeout(tick,200);
+    
+    setTimeout(tick, 200);
 }
 tick();
 
 // Secret ending
-function secretEnding(){
-    document.body.style.pointerEvents='none';
+function secretEnding() {
+    document.body.style.pointerEvents = 'none';
     poemEl.classList.add('hidden');
-    setTimeout(()=>{poemEl.innerHTML=PAGES.gone; poemEl.classList.remove('hidden');},150);
+    fadeToStatic(); // Switch to static for the secret ending
+    setTimeout(() => {
+        poemEl.innerHTML = PAGES.gone;
+        poemEl.classList.remove('hidden');
+    }, 150);
 }
-
 </script>
 </body>
 </html>
